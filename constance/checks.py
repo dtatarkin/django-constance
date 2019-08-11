@@ -1,7 +1,13 @@
+from datetime import datetime
+
 from django.core import checks
+from django import conf
+from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
+from constance.admin import get_values
 from . import settings
+
 
 
 @checks.register("constance")
@@ -25,6 +31,38 @@ def check_fieldsets(*args, **kwargs):
                 )
             ]
     return []
+
+
+@checks.register("constance")
+def check_inconsistent_use_tz_setting(*args, **kwargs):
+    """
+    A Django system check to make sure that, if the `USE_TZ = True` then
+    the config CONSTANCE_CONFIG should contain datetimes with timezone and vice versa.
+    """
+    use_tz = conf.settings.USE_TZ
+    check_results = []
+    for k, v in get_values().items():
+        if isinstance(v, datetime):
+            if timezone.is_aware(v) != use_tz:
+                if use_tz:
+                    check_results.append(checks.Warning(
+                        _(
+                            "Using naive datetime values while USE_TZ = True"
+                        ),
+                        hint="Add `tzinfo` to value of the field {}".format(k),
+                        obj=v,
+                        id="constance.E002",
+                    ))
+                else:
+                    check_results.append(checks.Warning(
+                        _(
+                            "Using datetime with timezone while USE_TZ = False"
+                        ),
+                        hint="Remove `tzinfo` from value of the field {}".format(k),
+                        obj=v,
+                        id="constance.E003",
+                    ))
+    return check_results
 
 
 def get_inconsistent_fieldnames():
